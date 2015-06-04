@@ -34,7 +34,7 @@
 
 
 if [ "$1" == "install" ]; then
-	TOOLS=('adduser' 'awk' 'basename' 'bzip2' 'cat' 'chmod' 'chown' 'deluser' 'dirname' 'find' 'grep' 'groupadd' 'id' 'ionice' 'lsof' 'mkdir' 'mv' 'pwd' 'rm' 'rsync' 'sleep' 'tar' 'touch' 'tr' 'useradd' 'userdel' 'usermod' 'wget' 'wput' 'zip')
+	TOOLS=('awk' 'basename' 'bzip2' 'cat' 'chmod' 'chown' 'dirname' 'find' 'grep' 'groupadd' 'id' 'ionice' 'lsb_release' 'lsof' 'mkdir' 'mv' 'pwd' 'rm' 'rsync' 'sleep' 'tar' 'touch' 'tr' 'useradd' 'userdel' 'usermod' 'wget' 'wput' 'zip')
 	for TOOL in ${TOOLS[@]}; do
 		if command -v $TOOL >/dev/null 2>&1; then echo "required tool found: $TOOL"; else echo "required tool not found or no access to it: $TOOL"; fi
 	done
@@ -183,11 +183,9 @@ if [ "$INSTALLMASTER" == "" ]; then
 fi
 if [ "`grep \"$INSTALLMASTER:\" /etc/passwd | awk -F ":" '{print $1}'`" != "$INSTALLMASTER" ]; then
 	if [ -d /home/$INSTALLMASTER ]; then
-		groupadd $INSTALLMASTER
-		/usr/sbin/useradd -d /home/$INSTALLMASTER -s /bin/bash -g $INSTALLMASTER $INSTALLMASTER
+		/usr/sbin/useradd -d /home/$INSTALLMASTER -s /bin/bash $INSTALLMASTER
 	else
-		groupadd $INSTALLMASTER
-		/usr/sbin/useradd -m -b /home -s /bin/bash -g $INSTALLMASTER $INSTALLMASTER
+		/usr/sbin/useradd -m -b /home -s /bin/bash $INSTALLMASTER
 	fi
 	if [ "$VARIABLE2" != "yesall" ]; then
 		echo "Set password for the user? It is not needed if you connect with a more secure keyfile!"
@@ -201,9 +199,6 @@ if [ "`grep \"$INSTALLMASTER:\" /etc/passwd | awk -F ":" '{print $1}'`" != "$INS
 	elif [ "$VARIABLE4" != "" ]; then
 		/usr/sbin/usermod -p `perl -e 'print crypt("'$VARIABLE4'","Sa")'` $INSTALLMASTER
 	fi
-else
-	echo "User found setting group \"$INSTALLMASTER\" as mastegroup"
-	usermod -g $INSTALLMASTER $INSTALLMASTER
 fi
 if [[ ! `grep "^${INSTALLMASTER}:" /etc/passwd` ]]; then
 	echo "Error: User $INSTALLMASTER could not be installed. Shutting down to prevent corrupted config and ini files."
@@ -225,6 +220,7 @@ for LOGFILE in ${LOGFILES[@]}; do
 	touch "/home/$INSTALLMASTER/logs/$LOGFILE.log"
 done
 chmod 660 /home/$INSTALLMASTER/logs/*.log
+# Debian and derivates specific setup
 if [ -f /etc/debian_version ]; then
 	if [ "$VARIABLE2" == "yesall" ]; then
 		INSTALLPACKAGES="yes"
@@ -466,13 +462,269 @@ echo '	HideFiles (^\..+|\.ssh|\.bash_history|\.bash_logout|\.bashrc|\.profile)$
 	fi
 	if [ -f /etc/init.d/proftpd ]; then /etc/init.d/proftpd restart; fi
 	fi
+elif [ -f /etc/arch-release ]; then
+	if [ "$VARIABLE2" == "yesall" ]; then
+		INSTALLPACKAGES="yes"
+	else
+		echo "You are running Arch Linux `cat /etc/arch-release`. Enter yes if you want to install the neccessary packages if needed"
+		read INSTALLPACKAGES
+	fi
+	if [ "$INSTALLPACKAGES" == "yes" ]; then
+		# We don't need to update the package database seperately
+		if [ "$VARIABLE2" == "yesall" ]; then
+			# We don't need to upgrade the system seperately
+			pacman -Syu wget wput screen sudo rsync --noconfirm --needed # This upgrades the system and installs all needed packages if they are needed
+			if [ "`uname -m`" == "x86_64" ]; then
+				if [[ $(cat /etc/pacman.conf | grep \\[multilib\\]) != "#[multilib]" ]]; then
+					pacman -S lib32-readline lib32-ncurses
+				else
+			    echo "You may need to enable the multilib repository and install the required libs yourself"
+				fi
+			fi
+		else
+			# We don't need to update the package database seperately
+			pacman -Syu wget wput screen sudo rsync --noconfirm --needed # This upgrades the system and installs all needed packages if they are needed
+			if [ "`uname -m`" == "x86_64" ]; then
+				if [[ $(cat /etc/pacman.conf | grep \\[multilib\\]) != "#[multilib]" ]]; then
+					pacman -S lib32-readline lib32-ncurses
+				else
+				  echo "You may need to enable the multilib repository and install the required libs yourself"
+				fi
+			else
+				pacman -S readline ncurses
+			fi
+		fi
+	fi
+	if [ "$VARIABLE2" == "yesall" ]; then
+		PROFTPD="yes"
+	else
+		echo "The recommended FTP Server is proftpd. It will be installed if you enter yes"
+		read PROFTPD
+	fi
+	if [ "$PROFTPD" == "yes" ]; then
+		if [ "$VARIABLE2" == "yesall" ]; then
+			pacman -S libmariadbclient postgresql-libs libcap pam --noconfirm --needed # Install Dependencies of ProFTPD so we don't need to install them while compiling
+			if [ -f /usr/bin/yaourt ]; then # Use yaourt to install proftpd
+				sudo -u $MASTERUSER "cd /tmp; yaourt -G proftpd"
+			else # Download the tarball and extract it
+				sudo -u $MASTERUSER " cd /tmp; curl https://aur.archlinux.org/packages/pr/proftpd/proftpd.tar.gz | tar xz"
+			fi
+			sudo -u $MASTERUSER "cd /tmp/proftpd; makepkg -scf --noconfirm"
+			pacman -U /tmp/proftpd/*.pkg.tar.xz --noconfirm
+			rm -rf "/tmp/proftpd"
+			ADDFTPRULES="yes"
+		else
+			pacman -S libmariadbclient postgresql-libs libcap pam --noconfirm --needed # Install Dependencies of ProFTPD so we don't need to install them while compiling
+			if [ -f /usr/bin/yaourt ]; then # Use yaourt to install proftpd
+				sudo -u $MASTERUSER "cd /tmp; yaourt -G proftpd"
+			else # Download the tarball and extract it
+				sudo -u $MASTERUSER " cd /tmp; curl https://aur.archlinux.org/packages/pr/proftpd/proftpd.tar.gz | tar xz"
+			fi
+			sudo -u $MASTERUSER "cd /tmp/proftpd; makepkg -scf --noconfirm"
+			pacman -U /tmp/proftpd/*.pkg.tar.xz --noconfirm
+			rm -rf "/tmp/proftpd"
+			echo "Add FTP rules? You might need to enhance them later. Enter \"yes\" or \"no\""
+			read ADDFTPRULES
+		fi
+		if [ "`grep '^\s*DefaultRoot\s*\~' /etc/proftpd.conf`" == "" ]; then
+				echo '
+DefaultRoot ~
+' >> /etc/proftpd.conf
+		fi
+		if [ "`grep 'Include\s*\/etc\/proftpd\/conf.d\/' /etc/proftpd.conf`" == "" ]; then
+				echo '
+Include /etc/proftpd.d/
+' >> /etc/proftpd.conf
+		fi
+		if [ ! -d "/etc/proftpd.d/" ]; then
+			mkdir -p "/etc/proftpd.d/"
+			chmod 755 "/etc/proftpd.d/"
+		fi
+		if [ "$ADDFTPRULES" == "yes" -a "`grep '<Directory \/home\/\*\/pserver\/\*>' /etc/proftpd.conf`" == "" -a ! -f "/etc/proftpd.d/easy-wi.conf" ]; then
+		echo '
+<Directory ~>
+        HideFiles (^\..+|\.ssh|\.bash_history|\.bash_logout|\.bashrc|\.profile|srcds_run|srcds_linux|hlds_run|hlds_amd|hlds_i686|\.rc|\.sh|\.zip|\.rar|\.7z|\.dll)$
+        PathDenyFilter (^\..+|\.ssh|\.bash_history|\.bash_logout|\.bashrc|\.profile|srcds_run|srcds_linux|hlds_run|hlds_amd|hlds_i686|\.rc|\.sh|\.zip|\.rar|\.7z|\.dll)$
+        HideNoAccess on
+        <Limit RNTO RNFR STOR DELE CHMOD SITE_CHMOD MKD RMD>
+                DenyAll
+        </Limit>
+</Directory>' > /etc/proftpd.d/easy-wi.conf
+echo "<Directory /home/$INSTALLMASTER>" >> /etc/proftpd.d/easy-wi.conf
+echo '	HideFiles (^\..+|\.ssh|\.bash_history|\.bash_logout|\.bashrc|\.profile)$
+	PathDenyFilter (^\..+|\.ssh|\.bash_history|\.bash_logout|\.bashrc|\.profile)$
+	HideNoAccess on
+	Umask 137 027
+	<Limit RNTO RNFR STOR DELE CHMOD SITE_CHMOD MKD RMD>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory /home/*/pserver/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/backup>
+        Umask 177 077
+        <Limit RNTO RNFR STOR DELE>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/projectcars*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/mc*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/bukkit*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/tekkit*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/tekkit-classic*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/samp*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/mtasa*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/teeworlds*/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/*/orangebox/*/*>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE MKD RMD>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/server/*/*/csgo/*>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/server/*/*/cstrike/*>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE MKD RMD>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/server/*/*/czero/*>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE MKD RMD>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/server/*/*/dod/*>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE MKD RMD>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/server/*/*/garrysmod/*>
+    Umask 077 077
+    <Limit RNFR RNTO STOR DELE MKD RMD>
+        AllowAll
+    </Limit>
+</Directory>
+<Directory ~/*/*/>
+	HideFiles (^\..+|srcds_run|srcds_linux|hlds_run|hlds_amd|hlds_i686|\.rc|\.sh|\.zip|\.rar|\.7z|\.dll)$
+	PathDenyFilter (^\..+|srcds_run|srcds_linux|hlds_run|hlds_amd|hlds_i686|\.rc|\.sh|\.zip|\.rar|\.7z|\.dll)$
+	HideNoAccess on
+</Directory>
+<Directory ~/*/*/*/*/addons>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/*/*/*/*/cfg>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/*/*/*/*/maps>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/*/*/*/addons>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/*/*/*/cfg>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/*/*/*/maps>
+        Umask 077 077
+        <Limit RNFR RNTO STOR DELE MKD RMD>
+                AllowAll
+        </Limit>
+</Directory>
+<Directory ~/*/*/cstrike/*>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/*/*/czero/*>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE>
+		AllowAll
+	</Limit>
+</Directory>
+<Directory ~/*/*/dod/*>
+	Umask 077 077
+	<Limit RNFR RNTO STOR DELE>
+		AllowAll
+	</Limit>
+</Directory>
+' >> /etc/proftpd.d/easy-wi.conf
+	fi
+	systemctl restart proftpd
+	fi
 fi
 if [ -f /etc/sudoers -a "`grep $INSTALLMASTER /etc/sudoers`" == "" ]; then
 echo "
-$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/useradd
-$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/userdel
-$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/deluser
-$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/usermod
+$INSTALLMASTER ALL = NOPASSWD: /usr/bin/useradd
+$INSTALLMASTER ALL = NOPASSWD: /usr/bin/userdel
+$INSTALLMASTER ALL = NOPASSWD: /usr/bin/deluser
+$INSTALLMASTER ALL = NOPASSWD: /usr/bin/usermod
 $INSTALLMASTER ALL = (ALL, !root:$INSTALLMASTER) NOPASSWD: /home/$INSTALLMASTER/control.sh
 $INSTALLMASTER ALL = (ALL, !root:$INSTALLMASTER) NOPASSWD: /home/$INSTALLMASTER/temp/*.sh" >>  /etc/sudoers
 if [ "`which setquota 2> /dev/null`" != "" ]; then echo "$INSTALLMASTER ALL = NOPASSWD: `which setquota`" >> /etc/sudoers; fi
@@ -485,7 +737,7 @@ cd /home/$INSTALLMASTER/masterserver
 echo "Downloading SteamCmd"
 mkdir -p /home/$INSTALLMASTER/masterserver/steamCMD/
 cd /home/$INSTALLMASTER/masterserver/steamCMD/
-wget -q --timeout=10 http://media.steampowered.com/client/steamcmd_linux.tar.gz
+wget -q --timeout=10 https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
 if [ -f steamcmd_linux.tar.gz ]; then
 	tar xfvz steamcmd_linux.tar.gz
 	rm steamcmd_linux.tar.gz
@@ -516,6 +768,16 @@ echo "#Minecraft can easily produce 1GB+ logs within one hour
 */5 * * * * root nice -n +19 $IONICE find /home/ -maxdepth 2 -type d -nouser -delete
 */5 * * * * root nice -n +19 $IONICE find /home/*/fdl_data/ /home/*/temp/ /tmp/ /var/run/screen/ -nouser -delete" >> /etc/crontab
 /etc/init.d/cron restart
+elif [ -f /usr/bin/crontab ]; then # Arch Linux is missing the file /etc/crontab
+	echo "#Minecraft can easily produce 1GB+ logs within one hour
+	*/5 * * * * nice -n +19 ionice -n 7 find /home/*/server/*/*/ -maxdepth 2 -type f -name \"screenlog.0\" -size +100M -delete
+
+	# Even sudo /usr/sbin/deluser --remove-all-files is used some data remain from time to time
+	*/5 * * * * nice -n +19 $IONICE find /home/ -maxdepth 2 -type d -nouser -delete
+	*/5 * * * * nice -n +19 $IONICE find /home/*/fdl_data/ /home/*/temp/ /tmp/ /var/run/screen/ -nouser -delete" | crontab
+	if [ -f /usr/lib/systemd/system/cronie.service ]; then
+		systemctl restart cronie
+	fi
 fi
 fi
 
@@ -855,7 +1117,7 @@ i=2
 while [ $i -le $COUNT ]; do
 	GAMENAME=`echo $VARIABLE2 | awk -F_ '{ print $'$i' }'`
 	if [ "$GAMENAME" != "" ]; then
-		screen -dmS $GAMENAME.delete rm -rf $HOMEFOLDER/masterserver/$GAMENAME $HOMEFOLDER/mastermaps/$GAMENAME $HOMEFOLDER/masteraddons/$GAMENAME 
+		screen -dmS $GAMENAME.delete rm -rf $HOMEFOLDER/masterserver/$GAMENAME $HOMEFOLDER/mastermaps/$GAMENAME $HOMEFOLDER/masteraddons/$GAMENAME
 		echo "`date`: Masterserver $GAMENAME deleted" >> $LOGDIR/update.log
 	fi
 	i=$[i+1]
@@ -951,8 +1213,6 @@ echo "`date`: User $VARIABLE2 created" >> $LOGDIR/update.log
 function customerDelete {
 echo "#!/bin/bash
 rm $HOMEFOLDER/temp/del-user-${VARIABLE2}.sh
-#${IONICE}nice -n +19 sudo /usr/sbin/deluser --remove-all-files ${VARIABLE2}-p
-#${IONICE}nice -n +19 sudo /usr/sbin/deluser --remove-all-files ${VARIABLE2}
 ${IONICE}nice -n +19 sudo /usr/sbin/userdel -fr ${VARIABLE2}-p
 ${IONICE}nice -n +19 sudo /usr/sbin/userdel -fr ${VARIABLE2}" > $HOMEFOLDER/temp/del-user-${VARIABLE2}.sh
 chmod +x $HOMEFOLDER/temp/del-user-${VARIABLE2}.sh
@@ -1654,7 +1914,7 @@ if [ -f $LOGDIR/server.log ]; then
 	fi
 fi
 fi
-} 
+}
 
 function server_stop {
 USERHOME='/home'
