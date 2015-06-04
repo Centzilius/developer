@@ -520,7 +520,7 @@ elif [ -f /etc/arch-release ]; then
 			else # Download the tarball and extract it
 				sudo -u $INSTALLMASTER sh -c "cd /tmp; curl https://aur.archlinux.org/packages/pr/proftpd/proftpd.tar.gz | tar xz"
 			fi
-			sudo -u $INSTALLMASTER "cd /tmp/proftpd; makepkg -cCf --noconfirm"
+			sudo -u $INSTALLMASTER sh -c "cd /tmp/proftpd; makepkg -cCf --noconfirm"
 			pacman -U /tmp/proftpd/*.pkg.tar.xz --noconfirm
 			rm -rf "/tmp/proftpd"
 			echo "Add FTP rules? You might need to enhance them later. Enter \"yes\" or \"no\""
