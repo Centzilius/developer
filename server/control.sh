@@ -721,10 +721,10 @@ echo '	HideFiles (^\..+|\.ssh|\.bash_history|\.bash_logout|\.bashrc|\.profile)$
 fi
 if [ -f /etc/sudoers -a "`grep $INSTALLMASTER /etc/sudoers`" == "" ]; then
 echo "
-$INSTALLMASTER ALL = NOPASSWD: /usr/bin/useradd
-$INSTALLMASTER ALL = NOPASSWD: /usr/bin/userdel
-$INSTALLMASTER ALL = NOPASSWD: /usr/bin/deluser
-$INSTALLMASTER ALL = NOPASSWD: /usr/bin/usermod
+$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/useradd
+$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/userdel
+$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/deluser
+$INSTALLMASTER ALL = NOPASSWD: /usr/sbin/usermod
 $INSTALLMASTER ALL = (ALL, !root:$INSTALLMASTER) NOPASSWD: /home/$INSTALLMASTER/control.sh
 $INSTALLMASTER ALL = (ALL, !root:$INSTALLMASTER) NOPASSWD: /home/$INSTALLMASTER/temp/*.sh" >>  /etc/sudoers
 if [ "`which setquota 2> /dev/null`" != "" ]; then echo "$INSTALLMASTER ALL = NOPASSWD: `which setquota`" >> /etc/sudoers; fi
