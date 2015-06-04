@@ -476,7 +476,7 @@ elif [ -f /etc/arch-release ]; then
 			pacman -Syu wget wput screen sudo rsync --noconfirm --needed # This upgrades the system and installs all needed packages if they are needed
 			if [ "`uname -m`" == "x86_64" ]; then
 				if [[ $(cat /etc/pacman.conf | grep \\[multilib\\]) != "#[multilib]" ]]; then
-					pacman -S lib32-readline lib32-ncurses
+					pacman -S lib32-readline lib32-ncurses lib32-gcc-libs --needed --noconfirm
 				else
 			    echo "You may need to enable the multilib repository and install the required libs yourself"
 				fi
@@ -486,12 +486,12 @@ elif [ -f /etc/arch-release ]; then
 			pacman -Syu wget wput screen sudo rsync --noconfirm --needed # This upgrades the system and installs all needed packages if they are needed
 			if [ "`uname -m`" == "x86_64" ]; then
 				if [[ $(cat /etc/pacman.conf | grep \\[multilib\\]) != "#[multilib]" ]]; then
-					pacman -S lib32-readline lib32-ncurses
+					pacman -S lib32-readline lib32-ncurses lib32-gcc-libs --needed --noconfirm
 				else
 				  echo "You may need to enable the multilib repository and install the required libs yourself"
 				fi
 			else
-				pacman -S readline ncurses
+				pacman -S readline ncurses --needed --noconfirm
 			fi
 		fi
 	fi
@@ -505,22 +505,22 @@ elif [ -f /etc/arch-release ]; then
 		if [ "$VARIABLE2" == "yesall" ]; then
 			pacman -S libmariadbclient postgresql-libs libcap pam --noconfirm --needed # Install Dependencies of ProFTPD so we don't need to install them while compiling
 			if [ -f /usr/bin/yaourt ]; then # Use yaourt to install proftpd
-				sudo -u $MASTERUSER "cd /tmp; yaourt -G proftpd"
+				sudo -u $INSTALLMASTER sh -c "cd /tmp; yaourt -G proftpd"
 			else # Download the tarball and extract it
-				sudo -u $MASTERUSER " cd /tmp; curl https://aur.archlinux.org/packages/pr/proftpd/proftpd.tar.gz | tar xz"
+				sudo -u $INSTALLMASTER sh -c "cd /tmp; curl https://aur.archlinux.org/packages/pr/proftpd/proftpd.tar.gz | tar xz"
 			fi
-			sudo -u $MASTERUSER "cd /tmp/proftpd; makepkg -scf --noconfirm"
+			sudo -u $INSTALLMASTER sh -c "cd /tmp/proftpd; makepkg -cCf --noconfirm"
 			pacman -U /tmp/proftpd/*.pkg.tar.xz --noconfirm
 			rm -rf "/tmp/proftpd"
 			ADDFTPRULES="yes"
 		else
 			pacman -S libmariadbclient postgresql-libs libcap pam --noconfirm --needed # Install Dependencies of ProFTPD so we don't need to install them while compiling
 			if [ -f /usr/bin/yaourt ]; then # Use yaourt to install proftpd
-				sudo -u $MASTERUSER "cd /tmp; yaourt -G proftpd"
+				sudo -u $INSTALLMASTER sh -c "cd /tmp; yaourt -G proftpd"
 			else # Download the tarball and extract it
-				sudo -u $MASTERUSER " cd /tmp; curl https://aur.archlinux.org/packages/pr/proftpd/proftpd.tar.gz | tar xz"
+				sudo -u $INSTALLMASTER sh -c "cd /tmp; curl https://aur.archlinux.org/packages/pr/proftpd/proftpd.tar.gz | tar xz"
 			fi
-			sudo -u $MASTERUSER "cd /tmp/proftpd; makepkg -scf --noconfirm"
+			sudo -u $INSTALLMASTER "cd /tmp/proftpd; makepkg -cCf --noconfirm"
 			pacman -U /tmp/proftpd/*.pkg.tar.xz --noconfirm
 			rm -rf "/tmp/proftpd"
 			echo "Add FTP rules? You might need to enhance them later. Enter \"yes\" or \"no\""
